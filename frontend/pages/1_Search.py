@@ -1,6 +1,10 @@
 import pandas as pd
 import streamlit as st
 
+if "role" not in st.session_state:
+    st.warning("⛔ Будь ласка, авторизуйтесь на головній сторінці.")
+    st.stop() # Зупиняє подальше виконання коду на сторінці
+
 st.set_page_config(page_title="Пошук", layout="wide")
 
 st.title("Пошук по реєстрах")
