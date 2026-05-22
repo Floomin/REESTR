@@ -46,8 +46,17 @@ def process_json_payload(db: pyodbc.Connection, task_id: str, file_name: str, js
                     skipped_count += 1
                     continue
 
-                # 3. Якщо дані нові - зберігаємо
-                check_id = create_plot_check(cursor, plot_id, task_id, source_version=current_hash)
+                # 3. Якщо дані нові - дістаємо оригінальну дату та зберігаємо
+                dzk_info = plot.get("dzkLandInfo") or {}
+                registry_date = dzk_info.get("UpdateDate")
+
+                check_id = create_plot_check(
+                    cursor,
+                    plot_id,
+                    task_id,
+                    source_version=current_hash,
+                    update_date=registry_date
+                )
 
                 insert_plot_snapshot(cursor, check_id, plot)
                 process_dzk(cursor, check_id, cadastral, plot.get("dzkLandInfo"))

@@ -1,18 +1,18 @@
 import pandas as pd
+import requests
 import streamlit as st
+
+st.set_page_config(page_title="Пошук", layout="wide")
 
 if "role" not in st.session_state:
     st.warning("⛔ Будь ласка, авторизуйтесь на головній сторінці.")
-    st.stop() # Зупиняє подальше виконання коду на сторінці
-
-st.set_page_config(page_title="Пошук", layout="wide")
+    st.stop()
 
 st.title("Пошук по реєстрах")
 st.markdown("---")
 
 st.subheader("Параметри пошуку")
 
-# Розбиваємо на 2 колонки для зручної сітки 2x2
 col1, col2 = st.columns(2)
 
 with col1:
@@ -21,46 +21,235 @@ with col1:
 
 with col2:
     koatuu = st.text_input("КОАТУУ", placeholder="Наприклад: 0520885200")
-    subject_name = st.text_input("ПІБ / Назва компанії", placeholder="Наприклад: ТОВ 'Зоря Поділля' або Коберник")
+    subject_name = st.text_input("ПІБ / Назва компанії", placeholder="Наприклад: ТОВ 'Зоря Поділля'")
 
-# Кнопка пошуку під блоком фільтрів
-st.write("") # Невеликий відступ
+st.write("")
 search_btn = st.button("Знайти", type="primary")
 
 st.markdown("---")
 
+# Функція для відправки запиту на сервер
+def fetch_data(page_num):
+    limit = 1000
+    offset = page_num * limit
+
+    params = st.session_state["search_params"]
+    params["limit"] = limit
+    params["offset"] = offset
+
+    with st.spinner("Завантаження даних..."):
+        try:
+            res = requests.get("http://127.0.0.1:8000/api/search/list", params=params)
+            if res.status_code == 200:
+                data = res.json()
+                st.session_state["search_results"] = data.get("data", [])
+                st.session_state["total_count"] = data.get("total", 0)
+                st.session_state["current_page"] = page_num
+            else:
+                st.error("Помилка сервера при пошуку.")
+        except Exception as e:
+            st.error(f"Помилка підключення: {e}")
+
+# 1. Логіка першого пошуку (натискання кнопки Знайти)
 if search_btn:
-    # Логіка для пошуку масиву ділянок (ЄДРПОУ, КОАТУУ або Назва)
-    if edrpou or subject_name or koatuu:
-        st.subheader("Знайдені ділянки")
+    if not (cadastral or edrpou or koatuu or subject_name):
+        st.warning("Будь ласка, введіть хоча б один параметр для пошуку.")
+    else:
+        # Зберігаємо параметри пошуку в сесію, щоб при перегортанні сторінок вони не губилися
+        st.session_state["search_params"] = {
+            "user_id": st.session_state["user_id"],
+            "cadastral": cadastral,
+            "edrpou": edrpou,
+            "koatuu": koatuu,
+            "subject_name": subject_name
+        }
+        st.session_state["search_params"] = {k: v for k, v in st.session_state["search_params"].items() if v}
+        fetch_data(0) # Завантажуємо першу сторінку
 
-        # Тимчасова таблиця-заглушка для демонстрації
-        df = pd.DataFrame({
-            "Кадастровий номер": ["0520885200:01:005:0813", "0520885200:01:005:0814"],
-            "Площа (га)": [5.9457, 2.1234],
-            "Цільове призначення": ["01.01", "01.01"],
-            "Орендар / Власник": ["ТОВ 'Зоря Поділля'", "ТОВ 'Зоря Поділля'"]
+# 2. Відображення результатів та пагінації
+selected_cadastral = None
+
+if "search_results" in st.session_state:
+    data = st.session_state["search_results"]
+    total = st.session_state["total_count"]
+    current_page = st.session_state["current_page"]
+
+    if not data:
+        st.info("За вашим запитом нічого не знайдено.")
+    else:
+        # Панель інформації та пагінації
+        col_info, col_prev, col_next = st.columns([2, 1, 1])
+
+        start_idx = current_page * 1000 + 1
+        end_idx = min((current_page + 1) * 1000, total)
+
+        with col_info:
+            st.subheader(f"Знайдено ділянок: {total}")
+            st.write(f"Показано записи {start_idx} - {end_idx}")
+
+        with col_prev:
+            if current_page > 0:
+                if st.button("⬅️ Попередні 1000", width="stretch"):
+                    fetch_data(current_page - 1)
+                    st.rerun()
+
+        with col_next:
+            if end_idx < total:
+                if st.button("Наступні 1000 ➡️", width="stretch"):
+                    fetch_data(current_page + 1)
+                    st.rerun()
+
+        # Виводимо таблицю
+        df = pd.DataFrame(data)
+        df_display = df.rename(columns={
+            "CadastralNumber": "Кадастровий номер",
+            "Koatuu": "КОАТУУ",
+            "Area": "Площа (га)"
         })
-
-        # Відображення зручної таблиці
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        df_display = df_display.fillna("—")
+        st.dataframe(df_display, width="stretch", hide_index=True)
 
         st.info("Оберіть кадастровий номер зі списку нижче для перегляду детального досьє.")
-        # Випадаючий список для вибору конкретної ділянки з результатів
-        selected_cadastral = st.selectbox("Детальна інформація по ділянці:", df["Кадастровий номер"])
-    else:
-        # Якщо шукали конкретно один номер (і інші поля порожні)
-        selected_cadastral = cadastral
+        selected_cadastral = st.selectbox(
+            "Детальна інформація по ділянці:",
+            df["CadastralNumber"],
+            key="cadastral_selector"
+        )
 
-    # Відображення досьє (ДЗК та ДРРП)
-    if selected_cadastral:
-        st.subheader(f"Досьє ділянки: {selected_cadastral}")
-        tab_dzk, tab_drrp = st.tabs(["ДЗК (Державний земельний кадастр)", "ДРРП (Реєстр речових прав)"])
+# 3. Завантаження та відображення досьє
+if selected_cadastral:
+    st.markdown("---")
+    st.subheader(f"Досьє ділянки: {selected_cadastral}")
 
-        with tab_dzk:
-            st.write("Тут буде таблиця з площею, цільовим призначенням та експлікацією угідь.")
-            st.write("Тут буде таблиця суб'єктів права з ДЗК.")
+    with st.spinner("Завантаження досьє..."):
+        try:
+            dossier_res = requests.get(f"http://127.0.0.1:8000/api/search/dossier/{selected_cadastral}")
+            if dossier_res.status_code == 200:
+                dossier = dossier_res.json()
 
-        with tab_drrp:
-            st.write("Тут буде інформація про РНМ та стан реєстрації.")
-            st.write("Тут буде таблиця з договорами оренди, строками дії та документами-підставами.")
+                tab_dzk, tab_drrp = st.tabs(["ДЗК (Державний земельний кадастр)", "ДРРП (Реєстр речових прав)"])
+
+                with tab_dzk:
+                    history = dossier.get("history", [])
+
+                    if not history:
+                        st.info("Дані ДЗК відсутні для цієї ділянки.")
+                    else:
+                        st.write("### Історія змін за даними ДЗК")
+
+                        import re
+
+                        # Функція для звичайних текстових значень
+                        def format_val(val):
+                            if val is None or str(val).strip() == "" or str(val).strip().lower() in ["none", "null"]:
+                                return "Інформація відсутня"
+                            return str(val)
+
+                        # Нова функція спеціально для дат
+                        def format_date(val):
+                            if val is None or str(val).strip() == "" or str(val).strip().lower() in ["none", "null"]:
+                                return "Інформація відсутня"
+
+                            val_str = str(val).strip()
+                            # Шукаємо шаблон YYYY-MM-DD (з опціональним часом після нього)
+                            match = re.match(r"^(\d{4})-(\d{2})-(\d{2})(.*)$", val_str)
+                            if match:
+                                year, month, day, rest = match.groups()
+                                # Повертаємо у форматі ДД.ММ.РРРР
+                                return f"{day}.{month}.{year}{rest}"
+                            return val_str
+
+                        # Цикл по всім історичним зрізам
+                        for idx, slice_data in enumerate(history):
+                            is_expanded = (idx == 0)
+
+                            # Використовуємо format_date для дати запиту (переверне дату і залишить час)
+                            title = f"Дата запиту: {format_date(slice_data['checked_at'])}"
+                            if idx == 0:
+                                title += " (Найсвіжіші дані)"
+
+                            with st.expander(title, expanded=is_expanded):
+                                snap = slice_data["snapshot"]
+
+                                # БЛОК 1
+                                st.markdown("#### Відомості про земельну ділянку")
+                                st.write(f"**Кадастровий номер земельної ділянки:** {format_val(snap.get('CadastralNumber'))}")
+                                st.write(f"**Цільове призначення:** {format_val(snap.get('Purpose'))}")
+
+                                area_val = format_val(snap.get('Area'))
+                                st.write(f"**Площа земельної ділянки:** {f'{area_val} га' if area_val != 'Інформація відсутня' else area_val}")
+                                st.write(f"**Місце розташування:** {format_val(snap.get('Location'))}")
+
+                                st.markdown("---")
+
+                                # БЛОК 2
+                                st.markdown("#### Відомості про суб'єктів права власності на земельну ділянку")
+                                if slice_data["ownerships"]:
+                                    for i, own in enumerate(slice_data["ownerships"]):
+                                        subject_name = str(own.get("NameFo") or "") + " " + str(own.get("NameUo") or "")
+                                        st.write(f"**Вид речового права:** {format_val(own.get('OwnershipType'))}")
+                                        st.write(f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}")
+                                        st.write(f"**Код ЄДРПОУ / ІПН:** {format_val(own.get('Edrpou'))}")
+                                        # Використовуємо format_date
+                                        st.write(f"**Дата державної реєстрації права:** {format_date(own.get('DateRegRight'))}")
+                                        st.write(f"**Номер запису про право:** {format_val(own.get('EntryRecordNumber'))}")
+                                        st.write(f"**Орган, що здійснив державну реєстрацію права:** {format_val(own.get('RegAuthority'))}")
+
+                                        if i < len(slice_data["ownerships"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Дані про власників відсутні.")
+
+                                st.markdown("---")
+
+                                # БЛОК 3
+                                st.markdown("#### Відомості про суб'єкта речового права на земельну ділянку")
+                                if slice_data["real_rights"]:
+                                    for i, right in enumerate(slice_data["real_rights"]):
+                                        subject_name = str(right.get("NameFo") or "") + " " + str(right.get("NameUo") or "")
+                                        st.write(f"**Вид речового права:** {format_val(right.get('PropertyRight'))}")
+                                        st.write(f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}")
+                                        st.write(f"**Код ЄДРПОУ / ІПН:** {format_val(right.get('Edrpou'))}")
+                                        # Використовуємо format_date
+                                        st.write(f"**Дата державної реєстрації права:** {format_date(right.get('DateRegRight'))}")
+                                        st.write(f"**Номер запису про право:** {format_val(right.get('EntryRecordNumber'))}")
+                                        st.write(f"**Орган, що здійснив державну реєстрацію права:** {format_val(right.get('RegAuthority'))}")
+
+                                        if i < len(slice_data["real_rights"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Дані про речові права відсутні.")
+
+                                st.markdown("---")
+
+                                # БЛОК 4
+                                st.markdown("#### Відомості про зареєстроване обмеження у використанні земельної ділянки")
+                                if slice_data["restrictions"]:
+                                    for i, rest in enumerate(slice_data["restrictions"]):
+                                        r_type = format_val(rest.get('RestrictionType'))
+                                        r_code = format_val(rest.get('RestrictionCode'))
+
+                                        if r_code != "Інформація відсутня":
+                                            st.write(f"**Вид обмеження:** {r_type} (Код: {r_code})")
+                                        else:
+                                            st.write(f"**Вид обмеження:** {r_type}")
+
+                                        # Використовуємо format_date
+                                        st.write(f"**Дата державної реєстрації обмеження:** {format_date(rest.get('RegistrationDate'))}")
+
+                                        if i < len(slice_data["restrictions"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Зареєстровані обмеження відсутні.")
+
+                with tab_drrp:
+                    rrp_data = dossier.get("rrp")
+                    if rrp_data:
+                        st.write("### Відомості про речові права")
+                        st.json(rrp_data)
+                    else:
+                        st.info("Дані ДРРП відсутні для цієї ділянки.")
+            else:
+                st.error("Не вдалося завантажити досьє.")
+        except Exception as e:
+            st.error(f"Помилка підключення: {e}")

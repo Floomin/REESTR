@@ -37,16 +37,16 @@ def get_latest_source_version(cursor, plot_id: int) -> str | None:
     row = cursor.fetchone()
     return row[0] if row else None
 
-def create_plot_check(cursor, plot_id, task_id, source_version=None):
+def create_plot_check(cursor, plot_id, task_id, source_version=None, update_date=None):
     """
     Створює запис перевірки (історичний зріз).
-    Приймає опціональний source_version (наприклад, hashCode з API).
+    Приймає опціональні source_version (hashCode) та update_date (дата з реєстру).
     """
     cursor.execute("""
         INSERT INTO PlotCheck (PlotId, TaskId, CheckedAt, SourceVersion)
         OUTPUT INSERTED.CheckId
-        VALUES (?, ?, GETDATE(), ?)
-    """, (plot_id, task_id, source_version))
+        VALUES (?, ?, COALESCE(TRY_CAST(? AS DATETIME2), GETDATE()), ?)
+    """, (plot_id, task_id, update_date, source_version))
 
     return cursor.fetchone()[0]
 

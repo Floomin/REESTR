@@ -9,6 +9,6 @@ backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#CEF2EC"
 
 # Основной цвет текста (самый темный из палитры для контраста)
-textColor = "#0A7355"
+textColor = "#085e45"
 
 font = "sans serif"
