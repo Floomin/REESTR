@@ -29,6 +29,33 @@ def _safe_date(value):
 
     return val_str
 
+def extract_clean_address(address_field):
+    """
+    Разбирает вложенные структуры адреса из JSON (списки, словари)
+    и возвращает чистый склеенный текст.
+    """
+    if not address_field:
+        return None
+
+    # Если из JSON пришла обычная строка — просто отдаем её
+    if isinstance(address_field, str):
+        return address_field.strip()
+
+    # Если пришел список словарей (наш случай: [{'addressDetail': 'Вінницька обл.'}])
+    if isinstance(address_field, list):
+        parts = []
+        for item in address_field:
+            if isinstance(item, dict):
+                # Вытаскиваем все текстовые значения (игнорируя пустые)
+                for val in item.values():
+                    if val and isinstance(val, str):
+                        parts.append(val.strip())
+            elif isinstance(item, str):
+                parts.append(item.strip())
+
+        return ", ".join(parts) if parts else None
+
+    return str(address_field)
 
 def process_dzk(cursor, check_id, cadastral_number, dzk_data):
     """
@@ -63,7 +90,7 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
             dzk_data.get("LandAreaNum"),
             _safe_str(dzk_data.get("Purpose")),
             _safe_str(dzk_data.get("Category")),
-            _safe_str(dzk_data.get("Location")),
+            extract_clean_address(dzk_data.get("Location")),
             _safe_str(dzk_data.get("kategoriaZemli")),
             reg_val
         ),

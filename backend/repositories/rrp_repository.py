@@ -14,6 +14,23 @@ def _safe_date(value):
             pass
     return val_str
 
+def extract_clean_address(address_field):
+    """Розбирає вкладені структури адреси з JSON та повертає чистий текст."""
+    if not address_field:
+        return None
+    if isinstance(address_field, str):
+        return address_field.strip()
+    if isinstance(address_field, list):
+        parts = []
+        for item in address_field:
+            if isinstance(item, dict):
+                for val in item.values():
+                    if val and isinstance(val, str):
+                        parts.append(val.strip())
+            elif isinstance(item, str):
+                parts.append(item.strip())
+        return ", ".join(parts) if parts else None
+    return str(address_field)
 
 def process_rrp(cursor, check_id, item_data):
     """
@@ -131,7 +148,7 @@ def process_rrp(cursor, check_id, item_data):
                 _safe_date(realty.get("regDate")),
                 realty.get("reType"),
                 realty.get("reState"),
-                str(realty.get("realtyAddress", "")) if realty.get("realtyAddress") else None,
+                extract_clean_address(realty.get("realtyAddress")),
             ),
         )
         realty_id = cursor.fetchone()[0]

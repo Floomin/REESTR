@@ -243,12 +243,152 @@ if selected_cadastral:
                                     st.write("Зареєстровані обмеження відсутні.")
 
                 with tab_drrp:
-                    rrp_data = dossier.get("rrp")
-                    if rrp_data:
-                        st.write("### Відомості про речові права")
-                        st.json(rrp_data)
-                    else:
+                    history = dossier.get("history", [])
+                    has_rrp_data = any(slice_data.get("rrp") for slice_data in history)
+
+                    if not has_rrp_data:
                         st.info("Дані ДРРП відсутні для цієї ділянки.")
+                    else:
+                        st.write("### Історія змін за даними ДРРП")
+
+                        # Допоміжна функція для рендерингу документів-підстав
+                        def render_documents(docs):
+                            if not docs:
+                                return "Інформація відсутня"
+
+                            doc_blocks = []
+                            for d in docs:
+                                parts = []
+
+                                # Тип документу (головний рівень)
+                                cd_type = format_val(d.get('CdType'))
+                                main_title = cd_type if cd_type != "Інформація відсутня" else "Документ"
+
+                                # Атрибути документу (вкладений рівень)
+                                if d.get('DocNumber') and str(d.get('DocNumber')).strip() not in ["", "None", "null"]:
+                                    parts.append(f"серія та номер: {d.get('DocNumber')}")
+                                if d.get('DocDate') and str(d.get('DocDate')).strip() not in ["", "None", "null"]:
+                                    parts.append(f"виданий {format_date(d.get('DocDate'))}")
+                                if d.get('Publisher') and str(d.get('Publisher')).strip() not in ["", "None", "null"]:
+                                    parts.append(f"видавник: {d.get('Publisher')}")
+
+                                # Збираємо блок для одного документу
+                                if parts:
+                                    sub_items = "\n".join([f"    * {p}" for p in parts])
+                                    doc_blocks.append(f"- **{main_title}**\n{sub_items}")
+                                else:
+                                    doc_blocks.append(f"- **{main_title}**")
+
+                            # Streamlit (через Markdown) автоматично відрендерить це як дворівневий список
+                            return "\n" + "\n".join(doc_blocks)
+
+                        for idx, slice_data in enumerate(history):
+                            rrp = slice_data.get("rrp")
+                            if not rrp:
+                                continue # Пропускаємо, якщо в цьому зрізі немає ДРРП
+
+                            is_expanded = (idx == 0)
+
+                            title = f"Дата запиту: {format_date(slice_data['checked_at'])}"
+                            if idx == 0:
+                                title += " (Найсвіжіші дані)"
+
+                            with st.expander(title, expanded=is_expanded):
+                                # БЛОК 1: Об'єкт нерухомого майна
+                                st.markdown("#### Актуальна інформація про об’єкт нерухомого майна:")
+                                st.write(f"**Реєстраційний номер об’єкта нерухомого майна:** {format_val(rrp.get('RegistrationNumber', rrp.get('RealtyNumber')))}")
+
+                                re_type = format_val(rrp.get('ReType'))
+                                full_area = format_val(rrp.get('FullArea'))
+                                obj_desc = f"{re_type}, площа: {full_area}" if full_area != "Інформація відсутня" else re_type
+                                st.write(f"**Об’єкт нерухомого майна:** {obj_desc}")
+
+                                st.write(f"**Дата державної реєстрації:** {format_date(rrp.get('RegistrationDate'))}")
+                                st.write(f"**Опис об’єкта / Адреса:** {format_val(rrp.get('RealtyAddress'))}")
+
+                                st.markdown("---")
+
+                                # БЛОК 2: Право власності
+                                st.markdown("#### Актуальна інформація про право власності:")
+                                if rrp.get("property_rights"):
+                                    for i, pr in enumerate(rrp["property_rights"]):
+                                        st.write(f"**Номер запису про право власності:** {format_val(pr.get('RegistrationNumber'))}")
+                                        st.write(f"**Тип права власності:** {format_val(pr.get('RightType'))}")
+                                        st.write(f"**Дата, час державної реєстрації:** {format_date(pr.get('RegistrationDate'))}")
+                                        st.write(f"**Державний реєстратор:** {format_val(pr.get('Registrar'))}")
+                                        st.write(f"**Підстава виникнення права власності:** {render_documents(pr.get('documents'))}")
+                                        st.write(f"**Розмір частки:** {format_val(pr.get('PartSize'))}")
+
+                                        owner_text = f"{format_val(pr.get('SubjectName'))} (ЄДРПОУ/ІПН: {format_val(pr.get('SubjectCode'))})"
+                                        st.write(f"**Власники:** {owner_text}")
+                                        st.write(f"**Стан:** {format_val(pr.get('PrState'))}")
+                                        if i < len(rrp["property_rights"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Відомості про право власності відсутні.")
+
+                                st.markdown("---")
+
+                                # БЛОК 3: Інші речові права
+                                st.markdown("#### Відомості про інші речові права:")
+                                if rrp.get("other_rights"):
+                                    for i, oright in enumerate(rrp["other_rights"]):
+                                        st.write(f"**Номер запису про інше речове право:** {format_val(oright.get('RegistrationNumber'))}")
+                                        st.write(f"**Вид іншого речового права:** {format_val(oright.get('RightType', oright.get('IrpSort')))}")
+                                        st.write(f"**Дата, час державної реєстрації:** {format_date(oright.get('RegistrationDate'))}")
+                                        st.write(f"**Державний реєстратор:** {format_val(oright.get('Registrar'))}")
+                                        st.write(f"**Підстава для державної реєстрації:** {render_documents(oright.get('documents'))}")
+
+                                        sbj_text = f"{format_val(oright.get('SubjectName'))} (ЄДРПОУ/ІПН: {format_val(oright.get('SubjectCode'))})"
+                                        st.write(f"**Відомості про суб’єктів:** {sbj_text}")
+
+                                        # Формуємо строк дії
+                                        term_str = f"з {format_date(oright.get('StartDate'))} по {format_date(oright.get('EndDate'))}"
+                                        if oright.get('ContractTerm'):
+                                            term_str += f" ({oright.get('ContractTerm')})"
+                                        st.write(f"**Строк дії:** {term_str}")
+
+                                        prolongation = "Так" if oright.get('IsAutomaticProlongation') else "Ні"
+                                        st.write(f"**Ознака «З правом пролонгації»:** {prolongation}")
+                                        st.write(f"**Опис предмета іншого речового права:** {format_val(oright.get('ObjectDescription'))}")
+                                        if i < len(rrp["other_rights"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Відомості про інші речові права відсутні.")
+
+                                st.markdown("---")
+
+                                # БЛОК 4: Іпотека
+                                st.markdown("#### Відомості про державну реєстрацію іпотеки:")
+                                if rrp.get("mortgages"):
+                                    for i, mort in enumerate(rrp["mortgages"]):
+                                        st.write(f"**Номер запису про іпотеку:** {format_val(mort.get('RegistrationNumber'))}")
+                                        st.write(f"**Дата державної реєстрації:** {format_date(mort.get('RegistrationDate'))}")
+                                        st.write(f"**Вид іпотеки:** {format_val(mort.get('MortgageType'))}")
+                                        st.write(f"**Суб’єкт:** {format_val(mort.get('SubjectName'))} (Код: {format_val(mort.get('SubjectCode'))})")
+                                        st.write(f"**Опис предмета:** {format_val(mort.get('ObjectDescription'))}")
+                                        st.write(f"**Стан:** {format_val(mort.get('PrState'))}")
+                                        if i < len(rrp["mortgages"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Відомості про державну реєстрацію іпотеки відсутні.")
+
+                                st.markdown("---")
+
+                                # БЛОК 5: Обтяження
+                                st.markdown("#### Відомості про державну реєстрацію обтяжень:")
+                                if rrp.get("limitations"):
+                                    for i, lim in enumerate(rrp["limitations"]):
+                                        st.write(f"**Номер запису про обтяження:** {format_val(lim.get('RegistrationNumber'))}")
+                                        st.write(f"**Дата державної реєстрації:** {format_date(lim.get('RegistrationDate'))}")
+                                        st.write(f"**Вид обтяження:** {format_val(lim.get('LimitationType'))}")
+                                        st.write(f"**Суб’єкт:** {format_val(lim.get('SubjectName'))} (Код: {format_val(lim.get('SubjectCode'))})")
+                                        st.write(f"**Опис обтяження:** {format_val(lim.get('ObjectDescription'))}")
+                                        st.write(f"**Стан:** {format_val(lim.get('LmState'))}")
+                                        if i < len(rrp["limitations"]) - 1:
+                                            st.write("")
+                                else:
+                                    st.write("Відомості про державну реєстрацію обтяжень відсутні.")
             else:
                 st.error("Не вдалося завантажити досьє.")
         except Exception as e:

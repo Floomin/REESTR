@@ -113,11 +113,10 @@ def search_plots_list(
 
 @router.get("/dossier/{cadastral}")
 def get_plot_dossier(cadastral: str, db: DbSession):
-    """Повертає повну історичну цепочку зрізів ДЗК для конкретної ділянки."""
+    """Повертає повну історичну цепочку зрізів ДЗК та ДРРП для конкретної ділянки."""
     cursor = db.cursor()
 
     try:
-        # 1. Знаходимо ВСІ історичні зрізи (PlotCheck) для цього кадастрового номера
         cursor.execute("""
             SELECT pc.CheckId, pc.CheckedAt, t.TaskName
             FROM LandPlot lp
@@ -133,49 +132,110 @@ def get_plot_dossier(cadastral: str, db: DbSession):
 
         history_data = []
 
-        # 2. Для кожної перевірки збираємо повний пакет даних ДЗК за вашими 4 блоками
         for ch_row in check_rows:
             check_id, checked_at, task_name = ch_row
 
-            # Блок 1: Відомості про земельну ділянку (Snapshot)
+            # --- БЛОК 1: ДЗК (Залишається без змін) ---
             cursor.execute("SELECT DzkSnapshotId, CadastralNumber, Purpose, Area, Location FROM PlotDzkSnapshot WHERE CheckId = ?", (check_id,))
             dzk_cols = [col[0] for col in cursor.description] if cursor.description else []
             dzk_row = cursor.fetchone()
 
-            if not dzk_row:
-                continue # Якщо в цьому зрізі немає даних ДЗК, пропускаємо
+            snapshot_data = dict(zip(dzk_cols, dzk_row, strict=False)) if dzk_row else {}
+            dzk_snapshot_id = snapshot_data.get("DzkSnapshotId")
 
-            snapshot_data = dict(zip(dzk_cols, dzk_row, strict=False))
-            dzk_snapshot_id = snapshot_data["DzkSnapshotId"]
+            ownerships, real_rights, restrictions = [], [], []
+            if dzk_snapshot_id:
+                cursor.execute("SELECT OwnershipType, NameFo, NameUo, Edrpou, DateRegRight, EntryRecordNumber, RegAuthority FROM PlotDzkOwnership WHERE DzkSnapshotId = ?", (dzk_snapshot_id,))
+                ownerships = [dict(zip([c[0] for c in cursor.description], r, strict=False)) for r in cursor.fetchall()]
 
-            # Блок 2: Відомості про суб'єктів права власності
+                cursor.execute("SELECT PropertyRight, NameFo, NameUo, Edrpou, DateRegRight, EntryRecordNumber, RegAuthority FROM PlotDzkSubjectRealRights WHERE DzkSnapshotId = ?", (dzk_snapshot_id,))
+                real_rights = [dict(zip([c[0] for c in cursor.description], r, strict=False)) for r in cursor.fetchall()]
+
+                cursor.execute("SELECT RestrictionType, RestrictionCode, RegistrationDate FROM PlotDzkRestrictions WHERE DzkSnapshotId = ?", (dzk_snapshot_id,))
+                restrictions = [dict(zip([c[0] for c in cursor.description], r, strict=False)) for r in cursor.fetchall()]
+
+            # --- БЛОК 2: ДРРП (НОВЕ) ---
+            rrp_data = None
             cursor.execute("""
-                SELECT OwnershipType, NameFo, NameUo, Edrpou, DateRegRight, EntryRecordNumber, RegAuthority
-                FROM PlotDzkOwnership
-                WHERE DzkSnapshotId = ?
-            """, (dzk_snapshot_id,))
-            own_cols = [col[0] for col in cursor.description]
-            ownerships = [dict(zip(own_cols, r, strict=False)) for r in cursor.fetchall()]
+                SELECT RealtyId, RealtyNumber, RegistrationNumber, RegistrationDate, ReType, ReState, RealtyAddress
+                FROM RrpRealtySnapshot WHERE CheckId = ?
+            """, (check_id,))
+            realty_cols = [col[0] for col in cursor.description] if cursor.description else []
+            realty_row = cursor.fetchone()
 
-            # Блок 3: Відомості про суб'єктів речових прав (Оренда тощо)
-            cursor.execute("""
-                SELECT PropertyRight, NameFo, NameUo, Edrpou, DateRegRight, EntryRecordNumber, RegAuthority
-                FROM PlotDzkSubjectRealRights
-                WHERE DzkSnapshotId = ?
-            """, (dzk_snapshot_id,))
-            right_cols = [col[0] for col in cursor.description]
-            real_rights = [dict(zip(right_cols, r, strict=False)) for r in cursor.fetchall()]
+            if realty_row:
+                rrp_data = dict(zip(realty_cols, realty_row, strict=False))
+                realty_id = rrp_data["RealtyId"]
 
-            # Блок 4: Відомості про зареєстровані обмеження
-            cursor.execute("""
-                SELECT RestrictionType, RestrictionCode, RegistrationDate
-                FROM PlotDzkRestrictions
-                WHERE DzkSnapshotId = ?
-            """, (dzk_snapshot_id,))
-            rest_cols = [col[0] for col in cursor.description]
-            restrictions = [dict(zip(rest_cols, r, strict=False)) for r in cursor.fetchall()]
+                # Площа об'єкта
+                cursor.execute("SELECT Area, AreaUM FROM RrpRealtyGroundArea WHERE RealtyId = ?", (realty_id,))
+                area_row = cursor.fetchone()
+                rrp_data["FullArea"] = f"{area_row[0]} {area_row[1]}" if area_row else None
 
-            # Пакуємо зріз в історію
+                # Права власності
+                cursor.execute("""
+                    SELECT pr.Id, pr.RegistrationNumber, pr.RightType, pr.RegistrationDate, pr.Registrar, pr.PartSize, pr.PrState,
+                           s.SubjectName, s.SubjectCode
+                    FROM RrpPropertyRights pr
+                    LEFT JOIN Subject s ON pr.SubjectId = s.SubjectId
+                    WHERE pr.RealtyId = ?
+                """, (realty_id,))
+                pr_cols = [c[0] for c in cursor.description] if cursor.description else []
+                prop_rights = []
+                for r in cursor.fetchall():
+                    pr_dict = dict(zip(pr_cols, r, strict=False))
+                    # Підтягуємо документи-підстави
+                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ?", (pr_dict["Id"],))
+                    pr_dict["documents"] = [dict(zip([c[0] for c in cursor.description], cd_r, strict=False)) for cd_r in cursor.fetchall()]
+                    prop_rights.append(pr_dict)
+                rrp_data["property_rights"] = prop_rights
+
+                # Інші речові права (Оренда)
+                cursor.execute("""
+                    SELECT irp.RightId as Id, irp.RegistrationNumber, irp.RightType, irp.RegistrationDate, irp.StartDate, irp.EndDate, irp.ContractTerm, irp.IsAutomaticProlongation, irp.ObjectDescription, irp.IrpSort,
+                           s.SubjectName, s.SubjectCode
+                    FROM PlotRightSnapshot irp
+                    LEFT JOIN Subject s ON irp.SubjectId = s.SubjectId
+                    WHERE irp.RealtyId = ?
+                """, (realty_id,))
+                or_cols = [c[0] for c in cursor.description] if cursor.description else []
+                other_rights = []
+                for r in cursor.fetchall():
+                    or_dict = dict(zip(or_cols, r, strict=False))
+                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ?", (or_dict["Id"],))
+                    or_dict["documents"] = [dict(zip([c[0] for c in cursor.description], cd_r, strict=False)) for cd_r in cursor.fetchall()]
+                    other_rights.append(or_dict)
+                rrp_data["other_rights"] = other_rights
+
+                # Іпотеки
+                cursor.execute("""
+                    SELECT m.MortgageId as Id, m.RegistrationNumber, m.RegistrationDate, m.MortgageType, m.PrState, m.ObjectDescription, m.Registrar,
+                           s.SubjectName, s.SubjectCode
+                    FROM RrpMortgage m
+                    LEFT JOIN Subject s ON m.SubjectId = s.SubjectId
+                    WHERE m.RealtyId = ?
+                """, (realty_id,))
+                mort_cols = [c[0] for c in cursor.description] if cursor.description else []
+                mortgages = []
+                for r in cursor.fetchall():
+                    m_dict = dict(zip(mort_cols, r, strict=False))
+                    cursor.execute("SELECT ObligationType, Amount, Currency FROM RrpMortgageObligations WHERE MortgageId = ?", (m_dict["Id"],))
+                    m_dict["obligations"] = [dict(zip([c[0] for c in cursor.description], obl_r, strict=False)) for obl_r in cursor.fetchall()]
+                    mortgages.append(m_dict)
+                rrp_data["mortgages"] = mortgages
+
+                # Обтяження (Арешти)
+                cursor.execute("""
+                    SELECT l.RegistrationNumber, l.RegistrationDate, l.LimitationType, l.LmState, l.ObjectDescription, l.Registrar,
+                           s.SubjectName, s.SubjectCode
+                    FROM RrpLimitations l
+                    LEFT JOIN Subject s ON l.SubjectId = s.SubjectId
+                    WHERE l.RealtyId = ?
+                """, (realty_id,))
+                lim_cols = [c[0] for c in cursor.description] if cursor.description else []
+                rrp_data["limitations"] = [dict(zip(lim_cols, r, strict=False)) for r in cursor.fetchall()]
+
+            # Пакуємо все в один зріз
             history_data.append({
                 "check_id": check_id,
                 "checked_at": checked_at.strftime("%Y-%m-%d %H:%M") if checked_at else "Невідомо",
@@ -183,7 +243,8 @@ def get_plot_dossier(cadastral: str, db: DbSession):
                 "snapshot": snapshot_data,
                 "ownerships": ownerships,
                 "real_rights": real_rights,
-                "restrictions": restrictions
+                "restrictions": restrictions,
+                "rrp": rrp_data  # НОВИЙ ВУЗОЛ
             })
 
         return {"status": "success", "history": history_data}
