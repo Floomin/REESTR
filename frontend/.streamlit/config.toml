@@ -12,3 +12,6 @@ secondaryBackgroundColor = "#CEF2EC"
 textColor = "#085e45"
 
 font = "sans serif"
+
+[server]
+maxUploadSize = 1000  # Дозволяє файли до 1 ГБ

@@ -2,7 +2,7 @@ import pyodbc
 from fastapi import Depends, FastAPI
 from loguru import logger
 
-from backend.api import auth, search, upload
+from backend.api import auth, dictionary, search, upload
 from backend.core.database import get_db_connection
 
 # Инициализация приложения
@@ -18,6 +18,7 @@ logger.add("data/api_errors.log", rotation="10 MB", level="ERROR")
 app.include_router(upload.router)
 app.include_router(auth.router)
 app.include_router(search.router)
+app.include_router(dictionary.router, prefix="/api")
 
 @app.get("/")
 def read_root():
