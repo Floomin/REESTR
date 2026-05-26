@@ -1,6 +1,6 @@
 import json
 
-from backend.repositories.subject_repository import get_or_create_subject
+from backend.repositories.subject_repository import apply_mdm_dictionary, get_or_create_subject
 
 
 def _safe_str(value):
@@ -117,12 +117,16 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
     # 3. Право власності ДЗК
     for own in dzk_data.get("OwnershipInfo") or []:
         if not isinstance(own, dict):
-            continue  # Захист
-        name = own.get("NameUo") or own.get("NameFo") or "Не вказано"
-        code = own.get("Edrpou")
+            continue
+
+        raw_name = own.get("NameUo") or own.get("NameFo") or "Не вказано"
+        raw_code = own.get("Edrpou")
+
+        # ЗАСТОСОВУЄМО MDM
+        clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
         sbj_type = "2" if own.get("NameUo") else "1"
 
-        subj_id = get_or_create_subject(cursor, code, name, sbj_type)
+        subj_id = get_or_create_subject(cursor, clean_code, clean_name, sbj_type)
 
         cursor.execute(
             """
@@ -135,9 +139,9 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
                 dzk_snapshot_id,
                 subj_id,
                 _safe_str(own.get("OwnershipType")),
-                _safe_str(own.get("NameFo")),
-                _safe_str(own.get("NameUo")),
-                _safe_str(own.get("Edrpou")),
+                clean_name if sbj_type == "1" else None, # Пишемо еталонне ПІБ
+                clean_name if sbj_type == "2" else None, # Пишемо еталонну Назву
+                clean_code,                              # Пишемо еталонний Код
                 _safe_date(own.get("DateRegRight")),
                 _safe_str(own.get("EntryRecordNumber")),
                 _safe_str(own.get("RegAuthority")),
@@ -148,12 +152,14 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
     # 4. Речові права / Оренда ДЗК
     for right in dzk_data.get("SubjectRealRightLand") or []:
         if not isinstance(right, dict):
-            continue  # Захист
-        name = right.get("NameUo") or right.get("NameFo") or "Не вказано"
-        code = right.get("Edrpou")
+            continue
+        raw_name = right.get("NameUo") or right.get("NameFo") or "Не вказано"
+        raw_code = right.get("Edrpou")
+        # ЗАСТОСОВУЄМО MDM
+        clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
         sbj_type = "2" if right.get("NameUo") else "1"
 
-        subj_id = get_or_create_subject(cursor, code, name, sbj_type)
+        subj_id = get_or_create_subject(cursor, clean_code, clean_name, sbj_type)
 
         cursor.execute(
             """
@@ -166,9 +172,9 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
                 dzk_snapshot_id,
                 subj_id,
                 _safe_str(right.get("PropertyRight")),
-                _safe_str(right.get("NameFo")),
-                _safe_str(right.get("NameUo")),
-                _safe_str(right.get("Edrpou")),
+                clean_name if sbj_type == "1" else None,
+                clean_name if sbj_type == "2" else None,
+                clean_code,
                 _safe_date(right.get("DateRegRight")),
                 _safe_str(right.get("EntryRecordNumber")),
                 _safe_str(right.get("RegAuthority")),

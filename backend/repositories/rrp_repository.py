@@ -1,4 +1,4 @@
-from backend.repositories.subject_repository import get_or_create_subject
+from backend.repositories.subject_repository import apply_mdm_dictionary, get_or_create_subject
 
 
 def _safe_date(value):
@@ -71,6 +71,13 @@ def process_rrp(cursor, check_id, item_data):
             for sbj in subjects:
                 if not isinstance(sbj, dict):
                     continue
+
+                raw_code = sbj.get("code")
+                raw_name = sbj.get("name") or sbj.get("sbjRlName") or "Не вказано"
+
+                # ЗАСТОСОВУЄМО MDM
+                clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
+
                 cursor.execute(
                     """
                     INSERT INTO PlotRrpSummarySubjects (SummarySnapshotId, Name, SbjRlName, Code, SbjType, IsOwner)
@@ -78,9 +85,9 @@ def process_rrp(cursor, check_id, item_data):
                 """,
                     (
                         summary_id,
-                        sbj.get("name"),
-                        sbj.get("sbjRlName"),
-                        sbj.get("code"),
+                        clean_name if sbj.get("name") else None,
+                        clean_name if sbj.get("sbjRlName") else None,
+                        clean_code,
                         sbj.get("type"),
                         sbj.get("isOwner"),
                     ),
