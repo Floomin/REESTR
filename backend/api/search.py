@@ -185,7 +185,7 @@ def get_plot_dossier(cadastral: str, db: DbSession):
                 for r in cursor.fetchall():
                     pr_dict = dict(zip(pr_cols, r, strict=False))
                     # Підтягуємо документи-підстави
-                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ?", (pr_dict["Id"],))
+                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ? AND ParentType = 'PROPERTY'", (pr_dict["Id"],))
                     pr_dict["documents"] = [dict(zip([c[0] for c in cursor.description], cd_r, strict=False)) for cd_r in cursor.fetchall()]
                     prop_rights.append(pr_dict)
                 rrp_data["property_rights"] = prop_rights
@@ -202,7 +202,7 @@ def get_plot_dossier(cadastral: str, db: DbSession):
                 other_rights = []
                 for r in cursor.fetchall():
                     or_dict = dict(zip(or_cols, r, strict=False))
-                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ?", (or_dict["Id"],))
+                    cursor.execute("SELECT CdType, DocNumber, DocDate, Publisher FROM RrpCauseDocuments WHERE ParentId = ? AND ParentType = 'IRP'", (or_dict["Id"],))
                     or_dict["documents"] = [dict(zip([c[0] for c in cursor.description], cd_r, strict=False)) for cd_r in cursor.fetchall()]
                     other_rights.append(or_dict)
                 rrp_data["other_rights"] = other_rights

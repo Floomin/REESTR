@@ -184,12 +184,13 @@ def process_rrp(cursor, check_id, item_data):
                 for sbj in subjects:
                     if not isinstance(sbj, dict):
                         continue
-                    subj_id = get_or_create_subject(
-                        cursor,
-                        sbj.get("sbjCode"),
-                        sbj.get("sbjName") or sbj.get("sbjRlName") or "Не вказано",
-                        sbj.get("dcSbjType"),
-                    )
+
+                    # 1. Застосовуємо MDM для власників
+                    raw_code = sbj.get("sbjCode")
+                    raw_name = sbj.get("sbjName") or sbj.get("sbjRlName") or "Не вказано"
+                    clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
+
+                    subj_id = get_or_create_subject(cursor, clean_code, clean_name, sbj.get("dcSbjType"))
 
                     cursor.execute(
                         """
@@ -216,43 +217,56 @@ def process_rrp(cursor, check_id, item_data):
                 if not isinstance(irp, dict):
                     continue
 
-                subjects = irp.get("subjects") or [{}]
-                if not isinstance(subjects, list):
-                    subjects = [{}]
+                subjects = irp.get("subjects") or []
+                main_subject = None
 
-                for sbj in subjects:
-                    if not isinstance(sbj, dict):
-                        continue
-                    subj_id = get_or_create_subject(
-                        cursor,
-                        sbj.get("sbjCode"),
-                        sbj.get("sbjName") or sbj.get("sbjRlName") or "Не вказано",
-                        sbj.get("dcSbjType"),
-                    )
+                if isinstance(subjects, list):
+                    for sbj in subjects:
+                        if not isinstance(sbj, dict):
+                            continue
+                        rl_name = str(sbj.get("sbjRlName") or "").lower()
+                        if "орендар" in rl_name or sbj.get("dcSbjKind") == "1":
+                            main_subject = sbj
+                            break
 
-                    auto_prolong = irp.get("isAutomaticProlongation")
-                    is_prolong = 1 if str(auto_prolong).lower() == "true" else 0
+                    if not main_subject and len(subjects) > 0 and isinstance(subjects[0], dict):
+                        main_subject = subjects[0]
 
-                    cursor.execute(
-                        """
-                        INSERT INTO PlotRightSnapshot (
-                            RealtyId, SubjectId, RightType, RegistrationNumber, RegistrationDate,
-                            ContractTerm, IsAutomaticProlongation, ObjectDescription, IrpSort
-                        ) OUTPUT INSERTED.RightId VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        (
-                            realty_id,
-                            subj_id,
-                            irp.get("IrpSort"),
-                            irp.get("rnNum"),
-                            _safe_date(irp.get("regDate")),
-                            irp.get("contractTerm"),
-                            is_prolong,
-                            irp.get("objectDescription"),
-                            irp.get("IrpSort"),
-                        ),
-                    )
-                    _insert_docs(cursor.fetchone()[0], "IRP", irp.get("causeDocuments"))
+                subj_id = None
+                if main_subject:
+                    # 2. Застосовуємо MDM для орендарів
+                    raw_code = main_subject.get("sbjCode")
+                    raw_name = main_subject.get("sbjName") or main_subject.get("sbjRlName") or "Не вказано"
+                    clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
+
+                    subj_id = get_or_create_subject(cursor, clean_code, clean_name, main_subject.get("dcSbjType"))
+
+                auto_prolong = irp.get("isAutomaticProlongation")
+                is_prolong = 1 if str(auto_prolong) in ["1", "true", "True"] else 0
+                term_text = irp.get("actTermText") or (f"{irp.get('year')} років" if irp.get("year") else None)
+
+                cursor.execute(
+                    """
+                    INSERT INTO PlotRightSnapshot (
+                        RealtyId, SubjectId, RightType, RegistrationNumber, RegistrationDate,
+                        StartDate, EndDate, ContractTerm, IsAutomaticProlongation, ObjectDescription, IrpSort
+                    ) OUTPUT INSERTED.RightId VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        realty_id,
+                        subj_id,
+                        irp.get("IrpSort"),
+                        irp.get("rnNum"),
+                        _safe_date(irp.get("regDate")),
+                        _safe_date(irp.get("contractTerm")),
+                        _safe_date(irp.get("expirationTerm")),
+                        term_text,
+                        is_prolong,
+                        irp.get("objectDescription"),
+                        irp.get("IrpSort"),
+                    ),
+                )
+                _insert_docs(cursor.fetchone()[0], "IRP", irp.get("causeDocuments"))
 
         # --- ИПОТЕКИ ---
         mortgages = realty.get("mortgage") or []
@@ -261,45 +275,59 @@ def process_rrp(cursor, check_id, item_data):
                 if not isinstance(mort, dict):
                     continue
 
-                subjects = mort.get("subjects") or [{}]
-                if not isinstance(subjects, list):
-                    subjects = [{}]
+                subjects = mort.get("subjects") or []
+                main_subject = None
 
-                for sbj in subjects:
-                    if not isinstance(sbj, dict):
-                        continue
-                    subj_id = get_or_create_subject(
-                        cursor, sbj.get("sbjCode"), sbj.get("sbjName") or "Не вказано", sbj.get("dcSbjType")
-                    )
+                # Шукаємо Іпотекодержателя (Банк/Кредитор)
+                if isinstance(subjects, list):
+                    for sbj in subjects:
+                        if not isinstance(sbj, dict):
+                            continue
+                        rl_name = str(sbj.get("sbjRlName") or "").lower()
+                        if "держатель" in rl_name or "кредитор" in rl_name or sbj.get("dcSbjKind") == "1":
+                            main_subject = sbj
+                            break
 
-                    cursor.execute(
-                        """
-                        INSERT INTO RrpMortgage (RealtyId, SubjectId, RegistrationNumber, RegistrationDate, MortgageType, PrState, ObjectDescription, Registrar)
-                        OUTPUT INSERTED.MortgageId VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        (
-                            realty_id,
-                            subj_id,
-                            mort.get("rnNum"),
-                            _safe_date(mort.get("regDate")),
-                            mort.get("prKind"),
-                            mort.get("prState"),
-                            mort.get("objectDescription"),
-                            mort.get("registrar"),
-                        ),
-                    )
-                    mort_id = cursor.fetchone()[0]
-                    _insert_docs(mort_id, "MORTGAGE", mort.get("causeDocuments"))
+                    if not main_subject and len(subjects) > 0 and isinstance(subjects[0], dict):
+                        main_subject = subjects[0]
 
-                    obl_list = mort.get("obligation") or []
-                    if isinstance(obl_list, list):
-                        for obl in obl_list:
-                            if not isinstance(obl, dict):
-                                continue
-                            cursor.execute(
-                                "INSERT INTO RrpMortgageObligations (MortgageId, ObligationType, Amount, Currency) VALUES (?, ?, ?, ?)",
-                                (mort_id, obl.get("oblType"), obl.get("amount"), obl.get("currency")),
-                            )
+                subj_id = None
+                if main_subject:
+                    # 3. Застосовуємо MDM для іпотекодержателя
+                    raw_code = main_subject.get("sbjCode")
+                    raw_name = main_subject.get("sbjName") or main_subject.get("sbjRlName") or "Не вказано"
+                    clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
+
+                    subj_id = get_or_create_subject(cursor, clean_code, clean_name, main_subject.get("dcSbjType"))
+
+                cursor.execute(
+                    """
+                    INSERT INTO RrpMortgage (RealtyId, SubjectId, RegistrationNumber, RegistrationDate, MortgageType, PrState, ObjectDescription, Registrar)
+                    OUTPUT INSERTED.MortgageId VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        realty_id,
+                        subj_id,
+                        mort.get("rnNum"),
+                        _safe_date(mort.get("regDate")),
+                        mort.get("prKind"),
+                        mort.get("prState"),
+                        mort.get("objectDescription"),
+                        mort.get("registrar"),
+                    ),
+                )
+                mort_id = cursor.fetchone()[0]
+                _insert_docs(mort_id, "MORTGAGE", mort.get("causeDocuments"))
+
+                obl_list = mort.get("obligation") or []
+                if isinstance(obl_list, list):
+                    for obl in obl_list:
+                        if not isinstance(obl, dict):
+                            continue
+                        cursor.execute(
+                            "INSERT INTO RrpMortgageObligations (MortgageId, ObligationType, Amount, Currency) VALUES (?, ?, ?, ?)",
+                            (mort_id, obl.get("oblType"), obl.get("amount"), obl.get("currency")),
+                        )
 
         # --- ОГРАНИЧЕНИЯ (Аресты) ---
         limitations = realty.get("limitation") or []
@@ -308,31 +336,45 @@ def process_rrp(cursor, check_id, item_data):
                 if not isinstance(lim, dict):
                     continue
 
-                subjects = lim.get("subjects") or [{}]
-                if not isinstance(subjects, list):
-                    subjects = [{}]
+                subjects = lim.get("subjects") or []
+                main_subject = None
 
-                for sbj in subjects:
-                    if not isinstance(sbj, dict):
-                        continue
-                    subj_id = get_or_create_subject(
-                        cursor, sbj.get("sbjCode"), sbj.get("sbjName") or "Не вказано", sbj.get("dcSbjType")
-                    )
+                # Шукаємо Обтяжувача
+                if isinstance(subjects, list):
+                    for sbj in subjects:
+                        if not isinstance(sbj, dict):
+                            continue
+                        rl_name = str(sbj.get("sbjRlName") or "").lower()
+                        if "обтяжувач" in rl_name or sbj.get("dcSbjKind") == "1":
+                            main_subject = sbj
+                            break
 
-                    cursor.execute(
-                        """
-                        INSERT INTO RrpLimitations (RealtyId, SubjectId, LimitationType, RegistrationNumber, RegistrationDate, LmState, ObjectDescription, Registrar)
-                        OUTPUT INSERTED.LimitationId VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        (
-                            realty_id,
-                            subj_id,
-                            lim.get("lmSort"),
-                            lim.get("rnNum"),
-                            _safe_date(lim.get("regDate")),
-                            lim.get("lmState"),
-                            lim.get("objectDescription"),
-                            lim.get("registrar"),
-                        ),
-                    )
-                    _insert_docs(cursor.fetchone()[0], "LIMITATION", lim.get("causeDocuments"))
+                    if not main_subject and len(subjects) > 0 and isinstance(subjects[0], dict):
+                        main_subject = subjects[0]
+
+                subj_id = None
+                if main_subject:
+                    # 4. Застосовуємо MDM для обтяжувача
+                    raw_code = main_subject.get("sbjCode")
+                    raw_name = main_subject.get("sbjName") or main_subject.get("sbjRlName") or "Не вказано"
+                    clean_code, clean_name = apply_mdm_dictionary(cursor, raw_code, raw_name)
+
+                    subj_id = get_or_create_subject(cursor, clean_code, clean_name, main_subject.get("dcSbjType"))
+
+                cursor.execute(
+                    """
+                    INSERT INTO RrpLimitations (RealtyId, SubjectId, LimitationType, RegistrationNumber, RegistrationDate, LmState, ObjectDescription, Registrar)
+                    OUTPUT INSERTED.LimitationId VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        realty_id,
+                        subj_id,
+                        lim.get("lmSort"),
+                        lim.get("rnNum"),
+                        _safe_date(lim.get("regDate")),
+                        lim.get("lmState"),
+                        lim.get("objectDescription"),
+                        lim.get("registrar"),
+                    ),
+                )
+                _insert_docs(cursor.fetchone()[0], "LIMITATION", lim.get("causeDocuments"))
