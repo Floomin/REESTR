@@ -2,7 +2,7 @@ import pyodbc
 from fastapi import Depends, FastAPI
 from loguru import logger
 
-from backend.api import auth, dictionary, search, upload
+from backend.api import analytics, auth, dictionary, search, upload
 from backend.core.database import get_db_connection
 
 # Инициализация приложения
@@ -19,7 +19,7 @@ app.include_router(upload.router)
 app.include_router(auth.router)
 app.include_router(search.router)
 app.include_router(dictionary.router, prefix="/api")
-
+app.include_router(analytics.router)
 @app.get("/")
 def read_root():
     return {"message": "Сервер Державні Реєстри успішно запущено!"}
