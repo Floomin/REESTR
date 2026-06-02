@@ -5,12 +5,15 @@ def apply_mdm_dictionary(cursor, code, name):
 
     # 1. Шукаємо в Журналі виправлень (для нульових або відсутніх кодів)
     if not clean_code or clean_code in ["0", "00000000", "0000000000"]:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT TOP 1 NewCode, NewName
             FROM JsonCorrections
             WHERE OriginalName = ?
             ORDER BY CorrectionId DESC
-        """, (safe_name,))
+        """,
+            (safe_name,),
+        )
         correction = cursor.fetchone()
         if correction:
             clean_code = correction[0]
@@ -18,11 +21,14 @@ def apply_mdm_dictionary(cursor, code, name):
 
     # 2. Шукаємо еталонну назву в CompanyReference (якщо код є і він валідний)
     if clean_code and clean_code not in ["0", "00000000", "0000000000"]:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT StandardName
             FROM CompanyReference
             WHERE Edrpou = ?
-        """, (clean_code,))
+        """,
+            (clean_code,),
+        )
         reference = cursor.fetchone()
         if reference:
             safe_name = reference[0]
@@ -36,14 +42,20 @@ def get_or_create_subject(cursor, code, name, subject_type):
 
     if clean_code:
         # Ищем по коду (самый надежный вариант)
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT SubjectId FROM Subject WHERE SubjectCode = ?
-        """, (clean_code,))
+        """,
+            (clean_code,),
+        )
     else:
         # Если кода нет, пытаемся найти по точному совпадению имени
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT SubjectId FROM Subject WHERE SubjectName = ? AND SubjectCode IS NULL
-        """, (safe_name,))
+        """,
+            (safe_name,),
+        )
 
     row = cursor.fetchone()
 
@@ -52,10 +64,13 @@ def get_or_create_subject(cursor, code, name, subject_type):
         return row[0]
 
     # Если не найден — создаем нового с еталонними даними
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO Subject (SubjectCode, SubjectName, SubjectType)
         OUTPUT INSERTED.SubjectId
         VALUES (?, ?, ?)
-    """, (clean_code, safe_name, subject_type))
+    """,
+        (clean_code, safe_name, subject_type),
+    )
 
     return cursor.fetchone()[0]

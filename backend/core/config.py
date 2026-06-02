@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     db_server: str = "localhost"
-    db_name: str = "ReestrDb"
+    db_name: str = "LandBank_v2"
     db_driver: str = "{ODBC Driver 17 for SQL Server}"
     db_trusted_connection: str = "yes"
     db_user: Optional[str] = None
@@ -21,5 +21,6 @@ class Settings(BaseSettings):
             return base_str + f"UID={self.db_user};PWD={self.db_password};"
         # Подключение через Windows Authentication
         return base_str + f"Trusted_Connection={self.db_trusted_connection};"
+
 
 settings = Settings()

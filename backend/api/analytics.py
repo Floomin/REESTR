@@ -9,12 +9,9 @@ from backend.core.database import get_db_connection
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 DbSession = Annotated[pyodbc.Connection, Depends(get_db_connection)]
 
+
 @router.get("/koatuu")
-def get_koatuu_analytics(
-    db: DbSession,
-    koatuu: Optional[str] = None,
-    company: Optional[str] = None
-):
+def get_koatuu_analytics(db: DbSession, koatuu: Optional[str] = None, company: Optional[str] = None):
     """Отримує детальну аналітику для вкладки Сільських рад (КОАТУУ) з перехресними фільтрами."""
     cursor = db.cursor()
 
@@ -81,7 +78,7 @@ def get_koatuu_analytics(
             "avg_ngo_per_ha": round(k_row[4] or 0.0, 2),
             "avg_end_year": int(k_row[5]) if k_row[5] else None,
             "auto_prolong_area": round(k_row[6] or 0.0, 2),
-            "arrested_area": round(k_row[7] or 0.0, 2)
+            "arrested_area": round(k_row[7] or 0.0, 2),
         }
 
         # --- ЗАПИТ 2: Топ користувачі (Орендарі) ---
@@ -107,8 +104,7 @@ def get_koatuu_analytics(
         """
         cursor.execute(top_query, (koatuu, k_param))
         top_lessees = [
-            {"company": r[0], "code": r[1], "area": round(r[2] or 0.0, 2), "plots": r[3]}
-            for r in cursor.fetchall()
+            {"company": r[0], "code": r[1], "area": round(r[2] or 0.0, 2), "plots": r[3]} for r in cursor.fetchall()
         ]
 
         # --- ЗАПИТ 3: Розподіл по роках завершення ---
@@ -135,8 +131,7 @@ def get_koatuu_analytics(
         """
         cursor.execute(years_query, (koatuu, k_param, company, company, c_param))
         lease_years = [
-            {"year": str(int(r[0])), "area": round(r[1] or 0.0, 2), "plots": r[2]}
-            for r in cursor.fetchall()
+            {"year": str(int(r[0])), "area": round(r[1] or 0.0, 2), "plots": r[2]} for r in cursor.fetchall()
         ]
 
         return {"status": "success", "kpi": kpi_data, "top_lessees": top_lessees, "lease_years": lease_years}

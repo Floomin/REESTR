@@ -12,16 +12,17 @@ from backend.services.parser_service import process_json_payload
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
 DbSession = Annotated[pyodbc.Connection, Depends(get_db_connection)]
 
+
 @router.post("/json")
 async def upload_json_file(
     # Використовуємо Annotated для уникнення помилки B008
     file: Annotated[UploadFile, File(...)],
-    db: DbSession = None
+    db: DbSession = None,
 ):
     """
     Приймає JSON файл з даними ділянок, парсить його та зберігає у БД.
     """
-    if not file.filename.endswith('.json'):
+    if not file.filename.endswith(".json"):
         raise HTTPException(status_code=400, detail="Дозволені лише JSON файли")
 
     try:

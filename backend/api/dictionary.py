@@ -34,17 +34,23 @@ def extract_subjects_from_json(json_data):
         dzk = plot.get("dzkLandInfo") or {}
         for own in dzk.get("OwnershipInfo") or []:
             if isinstance(own, dict) and (own.get("NameUo") or own.get("Edrpou")):
-                subjects.add((str(own.get("Edrpou", "")).strip(), str(own.get("NameUo") or own.get("NameFo", "")).strip()))
+                subjects.add(
+                    (str(own.get("Edrpou", "")).strip(), str(own.get("NameUo") or own.get("NameFo", "")).strip())
+                )
 
         for right in dzk.get("SubjectRealRightLand") or []:
             if isinstance(right, dict) and (right.get("NameUo") or right.get("Edrpou")):
-                subjects.add((str(right.get("Edrpou", "")).strip(), str(right.get("NameUo") or right.get("NameFo", "")).strip()))
+                subjects.add(
+                    (str(right.get("Edrpou", "")).strip(), str(right.get("NameUo") or right.get("NameFo", "")).strip())
+                )
 
         # 2. ДРРП (Зведена інформація)
         rrp_sum = plot.get("rrpLandInfo") or {}
         for sbj in rrp_sum.get("subject") or []:
             if isinstance(sbj, dict) and (sbj.get("name") or sbj.get("code")):
-                subjects.add((str(sbj.get("code", "")).strip(), str(sbj.get("name") or sbj.get("sbjRlName", "")).strip()))
+                subjects.add(
+                    (str(sbj.get("code", "")).strip(), str(sbj.get("name") or sbj.get("sbjRlName", "")).strip())
+                )
 
         # 3. ДРРП (Розширена інформація)
         adv = plot.get("RrpAdvanced") or {}
@@ -59,15 +65,19 @@ def extract_subjects_from_json(json_data):
                         continue
                     for sbj in node.get("subjects") or []:
                         if isinstance(sbj, dict) and (sbj.get("sbjName") or sbj.get("sbjCode")):
-                            subjects.add((str(sbj.get("sbjCode", "")).strip(), str(sbj.get("sbjName") or sbj.get("sbjRlName", "")).strip()))
+                            subjects.add(
+                                (
+                                    str(sbj.get("sbjCode", "")).strip(),
+                                    str(sbj.get("sbjName") or sbj.get("sbjRlName", "")).strip(),
+                                )
+                            )
 
     return subjects
 
 
 @router.post("/upload")
 async def upload_and_scan(
-    file: Annotated[UploadFile, File(...)],
-    db: Annotated[Connection, Depends(get_db_connection)]
+    file: Annotated[UploadFile, File(...)], db: Annotated[Connection, Depends(get_db_connection)]
 ):
     """Завантажує файл і сканує компанії в тимчасове сховище."""
     task_id = str(uuid.uuid4())
@@ -110,10 +120,13 @@ async def upload_and_scan(
                     continue  # Пропускаємо, бо вже є в еталонному довіднику
 
             # Якщо компанії немає в довіднику або це нульовий код - додаємо в чергу
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO CompanyStaging (TaskId, OriginalCode, OriginalName, IsZeroCode)
                 VALUES (?, ?, ?, ?)
-            """, (task_id, code, name, zero_code))
+            """,
+                (task_id, code, name, zero_code),
+            )
             new_count += 1
 
         db.commit()
@@ -127,10 +140,12 @@ async def upload_and_scan(
 
 # --- Моделі для запитів ---
 
+
 class StandardResolution(BaseModel):
     task_id: str
     original_code: str
     standard_name: str
+
 
 class ZeroResolution(BaseModel):
     task_id: str
@@ -141,25 +156,32 @@ class ZeroResolution(BaseModel):
 
 # --- 1. Черга для стандартних кодів ---
 
+
 @router.get("/queue/standard/{task_id}")
 def get_next_standard(task_id: str, db: Annotated[Connection, Depends(get_db_connection)]):
     """Повертає наступний код з черги разом із усіма варіантами його назв."""
     cursor = db.cursor()
 
     # Рахуємо скільки унікальних кодів залишилося
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT COUNT(DISTINCT OriginalCode)
         FROM CompanyStaging
         WHERE TaskId = ? AND IsZeroCode = 0
-    """, (task_id,))
+    """,
+        (task_id,),
+    )
     remaining_count = cursor.fetchone()[0]
 
     # Беремо один унікальний код з черги
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT TOP 1 OriginalCode
         FROM CompanyStaging
         WHERE TaskId = ? AND IsZeroCode = 0
-    """, (task_id,))
+    """,
+        (task_id,),
+    )
     row = cursor.fetchone()
 
     if not row:
@@ -168,20 +190,19 @@ def get_next_standard(task_id: str, db: Annotated[Connection, Depends(get_db_con
     code = row[0]
 
     # Збираємо всі криві назви, які були в JSON під цим кодом
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT OriginalName
         FROM CompanyStaging
         WHERE TaskId = ? AND OriginalCode = ? AND IsZeroCode = 0
-    """, (task_id, code))
+    """,
+        (task_id, code),
+    )
 
     variants = [r[0] for r in cursor.fetchall() if r[0]]
 
-    return {
-        "status": "ok",
-        "code": code,
-        "variants": variants,
-        "remaining": remaining_count
-    }
+    return {"status": "ok", "code": code, "variants": variants, "remaining": remaining_count}
+
 
 @router.post("/resolve/standard")
 def resolve_standard(data: StandardResolution, db: Annotated[Connection, Depends(get_db_connection)]):
@@ -189,19 +210,25 @@ def resolve_standard(data: StandardResolution, db: Annotated[Connection, Depends
     cursor = db.cursor()
     try:
         # 1. Записуємо в довідник (якщо хтось не додав його паралельно)
-        cursor.execute("""
+        cursor.execute(
+            """
             IF NOT EXISTS (SELECT 1 FROM CompanyReference WHERE Edrpou = ?)
             BEGIN
                 INSERT INTO CompanyReference (Edrpou, StandardName)
                 VALUES (?, ?)
             END
-        """, (data.original_code, data.original_code, data.standard_name))
+        """,
+            (data.original_code, data.original_code, data.standard_name),
+        )
 
         # 2. Видаляємо з черги всі записи з цим кодом для цього завдання
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM CompanyStaging
             WHERE TaskId = ? AND OriginalCode = ? AND IsZeroCode = 0
-        """, (data.task_id, data.original_code))
+        """,
+            (data.task_id, data.original_code),
+        )
 
         db.commit()
         return {"status": "success"}
@@ -213,34 +240,38 @@ def resolve_standard(data: StandardResolution, db: Annotated[Connection, Depends
 
 # --- 2. Черга для проблемних кодів (00000000) ---
 
+
 @router.get("/queue/zero/{task_id}")
 def get_next_zero(task_id: str, db: Annotated[Connection, Depends(get_db_connection)]):
     """Повертає наступну назву компанії без коду."""
     cursor = db.cursor()
 
     # Рахуємо скільки унікальних назв залишилося
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT COUNT(DISTINCT OriginalName)
         FROM CompanyStaging
         WHERE TaskId = ? AND IsZeroCode = 1
-    """, (task_id,))
+    """,
+        (task_id,),
+    )
     remaining_count = cursor.fetchone()[0]
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT TOP 1 OriginalName
         FROM CompanyStaging
         WHERE TaskId = ? AND IsZeroCode = 1
-    """, (task_id,))
+    """,
+        (task_id,),
+    )
     row = cursor.fetchone()
 
     if not row:
         return {"status": "empty"}
 
-    return {
-        "status": "ok",
-        "original_name": row[0],
-        "remaining": remaining_count
-    }
+    return {"status": "ok", "original_name": row[0], "remaining": remaining_count}
+
 
 @router.post("/resolve/zero")
 def resolve_zero(data: ZeroResolution, db: Annotated[Connection, Depends(get_db_connection)]):
@@ -252,25 +283,34 @@ def resolve_zero(data: ZeroResolution, db: Annotated[Connection, Depends(get_db_
     cursor = db.cursor()
     try:
         # 1. Перевіряємо, чи є вже такий введений код у довіднику
-        cursor.execute("""
+        cursor.execute(
+            """
             IF NOT EXISTS (SELECT 1 FROM CompanyReference WHERE Edrpou = ?)
             BEGIN
                 INSERT INTO CompanyReference (Edrpou, StandardName)
                 VALUES (?, ?)
             END
-        """, (data.new_code, data.new_code, data.standard_name))
+        """,
+            (data.new_code, data.new_code, data.standard_name),
+        )
 
         # 2. Записуємо правило в Журнал виправлень JSON
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO JsonCorrections (TaskId, OriginalName, NewCode, NewName)
             VALUES (?, ?, ?, ?)
-        """, (data.task_id, data.original_name, data.new_code, data.standard_name))
+        """,
+            (data.task_id, data.original_name, data.new_code, data.standard_name),
+        )
 
         # 3. Видаляємо оброблений запис з черги
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM CompanyStaging
             WHERE TaskId = ? AND OriginalName = ? AND IsZeroCode = 1
-        """, (data.task_id, data.original_name))
+        """,
+            (data.task_id, data.original_name),
+        )
 
         db.commit()
         return {"status": "success"}

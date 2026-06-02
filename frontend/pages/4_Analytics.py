@@ -21,9 +21,15 @@ with tab_koatuu:
     # Фільтри для першої вкладки
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        koatuu_filter = st.text_input("Код КОАТУУ (Сільська рада):", placeholder="Пошук по території...", key="k_filter")
+        koatuu_filter = st.text_input(
+            "Код КОАТУУ (Сільська рада):", placeholder="Пошук по території...", key="k_filter"
+        )
     with col_f2:
-        company_filter = st.text_input("ЄДРПОУ / Назва (Перехресний фільтр):", placeholder="Аналіз конкретної компанії в цій раді...", key="c_filter")
+        company_filter = st.text_input(
+            "ЄДРПОУ / Назва (Перехресний фільтр):",
+            placeholder="Аналіз конкретної компанії в цій раді...",
+            key="c_filter",
+        )
 
     if st.button("🚀 Згенерувати звіт", key="btn_koatuu", type="primary"):
         with st.spinner("Збір та агрегація даних..."):
@@ -47,18 +53,25 @@ with tab_koatuu:
                     c2.metric("Площа в оренді", f"{kpi['leased_area']} га")
 
                     # Виділяємо вільний запас кольором (якщо він є)
-                    free_area = kpi['owned_not_leased']
-                    c3.metric("У власності (НЕ в оренді)", f"{free_area} га", "Вільний запас" if free_area > 0 else None)
+                    free_area = kpi["owned_not_leased"]
+                    c3.metric(
+                        "У власності (НЕ в оренді)", f"{free_area} га", "Вільний запас" if free_area > 0 else None
+                    )
                     c4.metric("Середнє НГО", f"{kpi['avg_ngo_per_ha']} грн/га")
 
                     st.markdown("---")
                     c5, c6, c7 = st.columns(3)
-                    c5.metric("Середній рік завершення", kpi['avg_end_year'] or "Немає даних")
+                    c5.metric("Середній рік завершення", kpi["avg_end_year"] or "Немає даних")
                     c6.metric("Площа з автопролонгацією", f"{kpi['auto_prolong_area']} га")
 
                     # Ризикова зона
-                    arrested = kpi['arrested_area']
-                    c7.metric("Під обтяженнями / Арештами", f"{arrested} га", "Ризик!" if arrested > 0 else None, delta_color="inverse")
+                    arrested = kpi["arrested_area"]
+                    c7.metric(
+                        "Під обтяженнями / Арештами",
+                        f"{arrested} га",
+                        "Ризик!" if arrested > 0 else None,
+                        delta_color="inverse",
+                    )
 
                     st.markdown("---")
 

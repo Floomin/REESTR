@@ -29,6 +29,7 @@ def _safe_date(value):
 
     return val_str
 
+
 def extract_clean_address(address_field):
     """
     Разбирает вложенные структуры адреса из JSON (списки, словари)
@@ -56,6 +57,7 @@ def extract_clean_address(address_field):
         return ", ".join(parts) if parts else None
 
     return str(address_field)
+
 
 def process_dzk(cursor, check_id, cadastral_number, dzk_data):
     """
@@ -92,7 +94,7 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
             _safe_str(dzk_data.get("Category")),
             extract_clean_address(dzk_data.get("Location")),
             _safe_str(dzk_data.get("kategoriaZemli")),
-            reg_val
+            reg_val,
         ),
     )
     dzk_snapshot_id = cursor.fetchone()[0]
@@ -139,9 +141,9 @@ def process_dzk(cursor, check_id, cadastral_number, dzk_data):
                 dzk_snapshot_id,
                 subj_id,
                 _safe_str(own.get("OwnershipType")),
-                clean_name if sbj_type == "1" else None, # Пишемо еталонне ПІБ
-                clean_name if sbj_type == "2" else None, # Пишемо еталонну Назву
-                clean_code,                              # Пишемо еталонний Код
+                clean_name if sbj_type == "1" else None,  # Пишемо еталонне ПІБ
+                clean_name if sbj_type == "2" else None,  # Пишемо еталонну Назву
+                clean_code,  # Пишемо еталонний Код
                 _safe_date(own.get("DateRegRight")),
                 _safe_str(own.get("EntryRecordNumber")),
                 _safe_str(own.get("RegAuthority")),

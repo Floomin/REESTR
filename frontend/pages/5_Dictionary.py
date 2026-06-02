@@ -4,7 +4,9 @@ import streamlit as st
 st.set_page_config(page_title="MDM Словник", page_icon="📖", layout="wide")
 
 st.title("📖 MDM Словник: Нормалізація контрагентів")
-st.markdown("Цей модуль сканує файли вивантажень, знаходить нові компанії та дозволяє додати їх до еталонного довідника перед імпортом у базу.")
+st.markdown(
+    "Цей модуль сканує файли вивантажень, знаходить нові компанії та дозволяє додати їх до еталонного довідника перед імпортом у базу."
+)
 
 API_URL = "http://127.0.0.1:8000/api/dictionary"
 
@@ -30,7 +32,9 @@ if not st.session_state["mdm_task_id"]:
                         data = res.json()
                         st.session_state["mdm_task_id"] = data["task_id"]
                         st.session_state["mdm_queue_type"] = "standard"
-                        st.success(f"Сканування завершено! Знайдено нових суб'єктів для обробки: {data['found_new_subjects']}")
+                        st.success(
+                            f"Сканування завершено! Знайдено нових суб'єктів для обробки: {data['found_new_subjects']}"
+                        )
                         st.rerun()
                     else:
                         st.error(f"Помилка сканування: {res.text}")
@@ -84,11 +88,7 @@ if st.session_state["mdm_task_id"] and st.session_state["mdm_queue_type"] != "do
                         if not std_name.strip():
                             st.error("Назва не може бути порожньою.")
                         else:
-                            payload = {
-                                "task_id": task_id,
-                                "original_code": code,
-                                "standard_name": std_name.strip()
-                            }
+                            payload = {"task_id": task_id, "original_code": code, "standard_name": std_name.strip()}
                             post_res = requests.post(f"{API_URL}/resolve/standard", json=payload)
                             if post_res.status_code == 200:
                                 st.rerun()
@@ -127,7 +127,7 @@ if st.session_state["mdm_task_id"] and st.session_state["mdm_queue_type"] != "do
                                 "task_id": task_id,
                                 "original_name": orig_name,
                                 "new_code": new_code.strip(),
-                                "standard_name": std_name.strip()
+                                "standard_name": std_name.strip(),
                             }
                             post_res = requests.post(f"{API_URL}/resolve/zero", json=payload)
                             if post_res.status_code == 200:

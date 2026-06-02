@@ -24,29 +24,37 @@ def get_or_create_plot(cursor, cadastral_number):
 
     return cursor.fetchone()[0]
 
+
 def get_latest_source_version(cursor, plot_id: int) -> str | None:
     """
     Отримує SourceVersion (hashCode) останньої перевірки для вказаної ділянки.
     """
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT TOP 1 SourceVersion
         FROM PlotCheck
         WHERE PlotId = ?
         ORDER BY CheckedAt DESC
-    """, (plot_id,))
+    """,
+        (plot_id,),
+    )
     row = cursor.fetchone()
     return row[0] if row else None
+
 
 def create_plot_check(cursor, plot_id, task_id, source_version=None, update_date=None):
     """
     Створює запис перевірки (історичний зріз).
     Приймає опціональні source_version (hashCode) та update_date (дата з реєстру).
     """
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO PlotCheck (PlotId, TaskId, CheckedAt, SourceVersion)
         OUTPUT INSERTED.CheckId
         VALUES (?, ?, COALESCE(TRY_CAST(? AS DATETIME2), GETDATE()), ?)
-    """, (plot_id, task_id, update_date, source_version))
+    """,
+        (plot_id, task_id, update_date, source_version),
+    )
 
     return cursor.fetchone()[0]
 
@@ -95,21 +103,30 @@ def insert_ngo_snapshot(cursor, check_id, ngo_data):
         ngo_data.get("dateModify"),
         ngo_data.get("pricePerGekt"),
     )
+
+
 def create_api_task(cursor, task_id: str, task_name: str, state: int = 3):
     """
     Створює запис про нове завдання в базі даних (State: 3 - в процесі).
     """
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO ApiTask (TaskId, TaskName, State, CreatedAt)
         VALUES (?, ?, ?, GETDATE())
-    """, (task_id, task_name, state))
+    """,
+        (task_id, task_name, state),
+    )
+
 
 def finish_api_task(cursor, task_id: str, state: int):
     """
     Оновлює статус завдання при завершенні або помилці.
     """
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE ApiTask
         SET State = ?, FinishedAt = GETDATE()
         WHERE TaskId = ?
-    """, (state, task_id))
+    """,
+        (state, task_id),
+    )

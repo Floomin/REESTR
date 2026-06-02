@@ -14,6 +14,7 @@ def _safe_date(value):
             pass
     return val_str
 
+
 def extract_clean_address(address_field):
     """Розбирає вкладені структури адреси з JSON та повертає чистий текст."""
     if not address_field:
@@ -31,6 +32,7 @@ def extract_clean_address(address_field):
                 parts.append(item.strip())
         return ", ".join(parts) if parts else None
     return str(address_field)
+
 
 def process_rrp(cursor, check_id, item_data):
     """

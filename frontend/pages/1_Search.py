@@ -28,6 +28,7 @@ search_btn = st.button("Знайти", type="primary")
 
 st.markdown("---")
 
+
 # Функція для відправки запиту на сервер
 def fetch_data(page_num):
     limit = 1000
@@ -50,6 +51,7 @@ def fetch_data(page_num):
         except Exception as e:
             st.error(f"Помилка підключення: {e}")
 
+
 # 1. Логіка першого пошуку (натискання кнопки Знайти)
 if search_btn:
     if not (cadastral or edrpou or koatuu or subject_name):
@@ -61,10 +63,10 @@ if search_btn:
             "cadastral": cadastral,
             "edrpou": edrpou,
             "koatuu": koatuu,
-            "subject_name": subject_name
+            "subject_name": subject_name,
         }
         st.session_state["search_params"] = {k: v for k, v in st.session_state["search_params"].items() if v}
-        fetch_data(0) # Завантажуємо першу сторінку
+        fetch_data(0)  # Завантажуємо першу сторінку
 
 # 2. Відображення результатів та пагінації
 selected_cadastral = None
@@ -101,19 +103,15 @@ if "search_results" in st.session_state:
 
         # Виводимо таблицю
         df = pd.DataFrame(data)
-        df_display = df.rename(columns={
-            "CadastralNumber": "Кадастровий номер",
-            "Koatuu": "КОАТУУ",
-            "Area": "Площа (га)"
-        })
+        df_display = df.rename(
+            columns={"CadastralNumber": "Кадастровий номер", "Koatuu": "КОАТУУ", "Area": "Площа (га)"}
+        )
         df_display = df_display.fillna("—")
         st.dataframe(df_display, width="stretch", hide_index=True)
 
         st.info("Оберіть кадастровий номер зі списку нижче для перегляду детального досьє.")
         selected_cadastral = st.selectbox(
-            "Детальна інформація по ділянці:",
-            df["CadastralNumber"],
-            key="cadastral_selector"
+            "Детальна інформація по ділянці:", df["CadastralNumber"], key="cadastral_selector"
         )
 
 # 3. Завантаження та відображення досьє
@@ -161,7 +159,7 @@ if selected_cadastral:
 
                         # Цикл по всім історичним зрізам
                         for idx, slice_data in enumerate(history):
-                            is_expanded = (idx == 0)
+                            is_expanded = idx == 0
 
                             # Використовуємо format_date для дати запиту (переверне дату і залишить час)
                             title = f"Дата запиту: {format_date(slice_data['checked_at'])}"
@@ -173,11 +171,15 @@ if selected_cadastral:
 
                                 # БЛОК 1
                                 st.markdown("#### Відомості про земельну ділянку")
-                                st.write(f"**Кадастровий номер земельної ділянки:** {format_val(snap.get('CadastralNumber'))}")
+                                st.write(
+                                    f"**Кадастровий номер земельної ділянки:** {format_val(snap.get('CadastralNumber'))}"
+                                )
                                 st.write(f"**Цільове призначення:** {format_val(snap.get('Purpose'))}")
 
-                                area_val = format_val(snap.get('Area'))
-                                st.write(f"**Площа земельної ділянки:** {f'{area_val} га' if area_val != 'Інформація відсутня' else area_val}")
+                                area_val = format_val(snap.get("Area"))
+                                st.write(
+                                    f"**Площа земельної ділянки:** {f'{area_val} га' if area_val != 'Інформація відсутня' else area_val}"
+                                )
                                 st.write(f"**Місце розташування:** {format_val(snap.get('Location'))}")
 
                                 st.markdown("---")
@@ -188,12 +190,20 @@ if selected_cadastral:
                                     for i, own in enumerate(slice_data["ownerships"]):
                                         subject_name = str(own.get("NameFo") or "") + " " + str(own.get("NameUo") or "")
                                         st.write(f"**Вид речового права:** {format_val(own.get('OwnershipType'))}")
-                                        st.write(f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}")
+                                        st.write(
+                                            f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}"
+                                        )
                                         st.write(f"**Код ЄДРПОУ / ІПН:** {format_val(own.get('Edrpou'))}")
                                         # Використовуємо format_date
-                                        st.write(f"**Дата державної реєстрації права:** {format_date(own.get('DateRegRight'))}")
-                                        st.write(f"**Номер запису про право:** {format_val(own.get('EntryRecordNumber'))}")
-                                        st.write(f"**Орган, що здійснив державну реєстрацію права:** {format_val(own.get('RegAuthority'))}")
+                                        st.write(
+                                            f"**Дата державної реєстрації права:** {format_date(own.get('DateRegRight'))}"
+                                        )
+                                        st.write(
+                                            f"**Номер запису про право:** {format_val(own.get('EntryRecordNumber'))}"
+                                        )
+                                        st.write(
+                                            f"**Орган, що здійснив державну реєстрацію права:** {format_val(own.get('RegAuthority'))}"
+                                        )
 
                                         if i < len(slice_data["ownerships"]) - 1:
                                             st.write("")
@@ -206,14 +216,24 @@ if selected_cadastral:
                                 st.markdown("#### Відомості про суб'єкта речового права на земельну ділянку")
                                 if slice_data["real_rights"]:
                                     for i, right in enumerate(slice_data["real_rights"]):
-                                        subject_name = str(right.get("NameFo") or "") + " " + str(right.get("NameUo") or "")
+                                        subject_name = (
+                                            str(right.get("NameFo") or "") + " " + str(right.get("NameUo") or "")
+                                        )
                                         st.write(f"**Вид речового права:** {format_val(right.get('PropertyRight'))}")
-                                        st.write(f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}")
+                                        st.write(
+                                            f"**Прізвище, ім'я та по батькові / Найменування:** {format_val(subject_name)}"
+                                        )
                                         st.write(f"**Код ЄДРПОУ / ІПН:** {format_val(right.get('Edrpou'))}")
                                         # Використовуємо format_date
-                                        st.write(f"**Дата державної реєстрації права:** {format_date(right.get('DateRegRight'))}")
-                                        st.write(f"**Номер запису про право:** {format_val(right.get('EntryRecordNumber'))}")
-                                        st.write(f"**Орган, що здійснив державну реєстрацію права:** {format_val(right.get('RegAuthority'))}")
+                                        st.write(
+                                            f"**Дата державної реєстрації права:** {format_date(right.get('DateRegRight'))}"
+                                        )
+                                        st.write(
+                                            f"**Номер запису про право:** {format_val(right.get('EntryRecordNumber'))}"
+                                        )
+                                        st.write(
+                                            f"**Орган, що здійснив державну реєстрацію права:** {format_val(right.get('RegAuthority'))}"
+                                        )
 
                                         if i < len(slice_data["real_rights"]) - 1:
                                             st.write("")
@@ -223,11 +243,13 @@ if selected_cadastral:
                                 st.markdown("---")
 
                                 # БЛОК 4
-                                st.markdown("#### Відомості про зареєстроване обмеження у використанні земельної ділянки")
+                                st.markdown(
+                                    "#### Відомості про зареєстроване обмеження у використанні земельної ділянки"
+                                )
                                 if slice_data["restrictions"]:
                                     for i, rest in enumerate(slice_data["restrictions"]):
-                                        r_type = format_val(rest.get('RestrictionType'))
-                                        r_code = format_val(rest.get('RestrictionCode'))
+                                        r_type = format_val(rest.get("RestrictionType"))
+                                        r_code = format_val(rest.get("RestrictionCode"))
 
                                         if r_code != "Інформація відсутня":
                                             st.write(f"**Вид обмеження:** {r_type} (Код: {r_code})")
@@ -235,7 +257,9 @@ if selected_cadastral:
                                             st.write(f"**Вид обмеження:** {r_type}")
 
                                         # Використовуємо format_date
-                                        st.write(f"**Дата державної реєстрації обмеження:** {format_date(rest.get('RegistrationDate'))}")
+                                        st.write(
+                                            f"**Дата державної реєстрації обмеження:** {format_date(rest.get('RegistrationDate'))}"
+                                        )
 
                                         if i < len(slice_data["restrictions"]) - 1:
                                             st.write("")
@@ -261,15 +285,15 @@ if selected_cadastral:
                                 parts = []
 
                                 # Тип документу (головний рівень)
-                                cd_type = format_val(d.get('CdType'))
+                                cd_type = format_val(d.get("CdType"))
                                 main_title = cd_type if cd_type != "Інформація відсутня" else "Документ"
 
                                 # Атрибути документу (вкладений рівень)
-                                if d.get('DocNumber') and str(d.get('DocNumber')).strip() not in ["", "None", "null"]:
+                                if d.get("DocNumber") and str(d.get("DocNumber")).strip() not in ["", "None", "null"]:
                                     parts.append(f"серія та номер: {d.get('DocNumber')}")
-                                if d.get('DocDate') and str(d.get('DocDate')).strip() not in ["", "None", "null"]:
+                                if d.get("DocDate") and str(d.get("DocDate")).strip() not in ["", "None", "null"]:
                                     parts.append(f"виданий {format_date(d.get('DocDate'))}")
-                                if d.get('Publisher') and str(d.get('Publisher')).strip() not in ["", "None", "null"]:
+                                if d.get("Publisher") and str(d.get("Publisher")).strip() not in ["", "None", "null"]:
                                     parts.append(f"видавник: {d.get('Publisher')}")
 
                                 # Збираємо блок для одного документу
@@ -285,9 +309,9 @@ if selected_cadastral:
                         for idx, slice_data in enumerate(history):
                             rrp = slice_data.get("rrp")
                             if not rrp:
-                                continue # Пропускаємо, якщо в цьому зрізі немає ДРРП
+                                continue  # Пропускаємо, якщо в цьому зрізі немає ДРРП
 
-                            is_expanded = (idx == 0)
+                            is_expanded = idx == 0
 
                             title = f"Дата запиту: {format_date(slice_data['checked_at'])}"
                             if idx == 0:
@@ -296,11 +320,15 @@ if selected_cadastral:
                             with st.expander(title, expanded=is_expanded):
                                 # БЛОК 1: Об'єкт нерухомого майна
                                 st.markdown("#### Актуальна інформація про об’єкт нерухомого майна:")
-                                st.write(f"**Реєстраційний номер об’єкта нерухомого майна:** {format_val(rrp.get('RegistrationNumber', rrp.get('RealtyNumber')))}")
+                                st.write(
+                                    f"**Реєстраційний номер об’єкта нерухомого майна:** {format_val(rrp.get('RegistrationNumber', rrp.get('RealtyNumber')))}"
+                                )
 
-                                re_type = format_val(rrp.get('ReType'))
-                                full_area = format_val(rrp.get('FullArea'))
-                                obj_desc = f"{re_type}, площа: {full_area}" if full_area != "Інформація відсутня" else re_type
+                                re_type = format_val(rrp.get("ReType"))
+                                full_area = format_val(rrp.get("FullArea"))
+                                obj_desc = (
+                                    f"{re_type}, площа: {full_area}" if full_area != "Інформація відсутня" else re_type
+                                )
                                 st.write(f"**Об’єкт нерухомого майна:** {obj_desc}")
 
                                 st.write(f"**Дата державної реєстрації:** {format_date(rrp.get('RegistrationDate'))}")
@@ -312,11 +340,17 @@ if selected_cadastral:
                                 st.markdown("#### Актуальна інформація про право власності:")
                                 if rrp.get("property_rights"):
                                     for i, pr in enumerate(rrp["property_rights"]):
-                                        st.write(f"**Номер запису про право власності:** {format_val(pr.get('RegistrationNumber'))}")
+                                        st.write(
+                                            f"**Номер запису про право власності:** {format_val(pr.get('RegistrationNumber'))}"
+                                        )
                                         st.write(f"**Тип права власності:** {format_val(pr.get('RightType'))}")
-                                        st.write(f"**Дата, час державної реєстрації:** {format_date(pr.get('RegistrationDate'))}")
+                                        st.write(
+                                            f"**Дата, час державної реєстрації:** {format_date(pr.get('RegistrationDate'))}"
+                                        )
                                         st.write(f"**Державний реєстратор:** {format_val(pr.get('Registrar'))}")
-                                        st.write(f"**Підстава виникнення права власності:** {render_documents(pr.get('documents'))}")
+                                        st.write(
+                                            f"**Підстава виникнення права власності:** {render_documents(pr.get('documents'))}"
+                                        )
                                         st.write(f"**Розмір частки:** {format_val(pr.get('PartSize'))}")
 
                                         owner_text = f"{format_val(pr.get('SubjectName'))} (ЄДРПОУ/ІПН: {format_val(pr.get('SubjectCode'))})"
@@ -333,24 +367,34 @@ if selected_cadastral:
                                 st.markdown("#### Відомості про інші речові права:")
                                 if rrp.get("other_rights"):
                                     for i, oright in enumerate(rrp["other_rights"]):
-                                        st.write(f"**Номер запису про інше речове право:** {format_val(oright.get('RegistrationNumber'))}")
-                                        st.write(f"**Вид іншого речового права:** {format_val(oright.get('RightType', oright.get('IrpSort')))}")
-                                        st.write(f"**Дата, час державної реєстрації:** {format_date(oright.get('RegistrationDate'))}")
+                                        st.write(
+                                            f"**Номер запису про інше речове право:** {format_val(oright.get('RegistrationNumber'))}"
+                                        )
+                                        st.write(
+                                            f"**Вид іншого речового права:** {format_val(oright.get('RightType', oright.get('IrpSort')))}"
+                                        )
+                                        st.write(
+                                            f"**Дата, час державної реєстрації:** {format_date(oright.get('RegistrationDate'))}"
+                                        )
                                         st.write(f"**Державний реєстратор:** {format_val(oright.get('Registrar'))}")
-                                        st.write(f"**Підстава для державної реєстрації:** {render_documents(oright.get('documents'))}")
+                                        st.write(
+                                            f"**Підстава для державної реєстрації:** {render_documents(oright.get('documents'))}"
+                                        )
 
                                         sbj_text = f"{format_val(oright.get('SubjectName'))} (ЄДРПОУ/ІПН: {format_val(oright.get('SubjectCode'))})"
                                         st.write(f"**Відомості про суб’єктів:** {sbj_text}")
 
                                         # Формуємо строк дії
                                         term_str = f"з {format_date(oright.get('StartDate'))} по {format_date(oright.get('EndDate'))}"
-                                        if oright.get('ContractTerm'):
+                                        if oright.get("ContractTerm"):
                                             term_str += f" ({oright.get('ContractTerm')})"
                                         st.write(f"**Строк дії:** {term_str}")
 
-                                        prolongation = "Так" if oright.get('IsAutomaticProlongation') else "Ні"
+                                        prolongation = "Так" if oright.get("IsAutomaticProlongation") else "Ні"
                                         st.write(f"**Ознака «З правом пролонгації»:** {prolongation}")
-                                        st.write(f"**Опис предмета іншого речового права:** {format_val(oright.get('ObjectDescription'))}")
+                                        st.write(
+                                            f"**Опис предмета іншого речового права:** {format_val(oright.get('ObjectDescription'))}"
+                                        )
                                         if i < len(rrp["other_rights"]) - 1:
                                             st.write("")
                                 else:
@@ -362,10 +406,16 @@ if selected_cadastral:
                                 st.markdown("#### Відомості про державну реєстрацію іпотеки:")
                                 if rrp.get("mortgages"):
                                     for i, mort in enumerate(rrp["mortgages"]):
-                                        st.write(f"**Номер запису про іпотеку:** {format_val(mort.get('RegistrationNumber'))}")
-                                        st.write(f"**Дата державної реєстрації:** {format_date(mort.get('RegistrationDate'))}")
+                                        st.write(
+                                            f"**Номер запису про іпотеку:** {format_val(mort.get('RegistrationNumber'))}"
+                                        )
+                                        st.write(
+                                            f"**Дата державної реєстрації:** {format_date(mort.get('RegistrationDate'))}"
+                                        )
                                         st.write(f"**Вид іпотеки:** {format_val(mort.get('MortgageType'))}")
-                                        st.write(f"**Суб’єкт:** {format_val(mort.get('SubjectName'))} (Код: {format_val(mort.get('SubjectCode'))})")
+                                        st.write(
+                                            f"**Суб’єкт:** {format_val(mort.get('SubjectName'))} (Код: {format_val(mort.get('SubjectCode'))})"
+                                        )
                                         st.write(f"**Опис предмета:** {format_val(mort.get('ObjectDescription'))}")
                                         st.write(f"**Стан:** {format_val(mort.get('PrState'))}")
                                         if i < len(rrp["mortgages"]) - 1:
@@ -379,10 +429,16 @@ if selected_cadastral:
                                 st.markdown("#### Відомості про державну реєстрацію обтяжень:")
                                 if rrp.get("limitations"):
                                     for i, lim in enumerate(rrp["limitations"]):
-                                        st.write(f"**Номер запису про обтяження:** {format_val(lim.get('RegistrationNumber'))}")
-                                        st.write(f"**Дата державної реєстрації:** {format_date(lim.get('RegistrationDate'))}")
+                                        st.write(
+                                            f"**Номер запису про обтяження:** {format_val(lim.get('RegistrationNumber'))}"
+                                        )
+                                        st.write(
+                                            f"**Дата державної реєстрації:** {format_date(lim.get('RegistrationDate'))}"
+                                        )
                                         st.write(f"**Вид обтяження:** {format_val(lim.get('LimitationType'))}")
-                                        st.write(f"**Суб’єкт:** {format_val(lim.get('SubjectName'))} (Код: {format_val(lim.get('SubjectCode'))})")
+                                        st.write(
+                                            f"**Суб’єкт:** {format_val(lim.get('SubjectName'))} (Код: {format_val(lim.get('SubjectCode'))})"
+                                        )
                                         st.write(f"**Опис обтяження:** {format_val(lim.get('ObjectDescription'))}")
                                         st.write(f"**Стан:** {format_val(lim.get('LmState'))}")
                                         if i < len(rrp["limitations"]) - 1:

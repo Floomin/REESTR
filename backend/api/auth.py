@@ -13,19 +13,24 @@ from backend.core.security import verify_password
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 DbSession = Annotated[pyodbc.Connection, Depends(get_db_connection)]
 
+
 class LoginRequest(BaseModel):
     login: str
     password: str
+
 
 @router.post("/login")
 def login(req: LoginRequest, db: DbSession):
     cursor = db.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT UserId, PasswordHash, FullName, Role, IsActive
         FROM AppUser
         WHERE Login = ?
-    """, (req.login,))
+    """,
+        (req.login,),
+    )
 
     user = cursor.fetchone()
 
@@ -43,18 +48,16 @@ def login(req: LoginRequest, db: DbSession):
         raise HTTPException(status_code=401, detail="Невірний логін або пароль")
 
     try:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO UserActionLog (UserId, ActionType, ActionDetails)
             VALUES (?, 'LOGIN', 'Успішний вхід в систему')
-        """, (user_id,))
+        """,
+            (user_id,),
+        )
         db.commit()
     except Exception as e:
         db.rollback()
         logger.error(f"Помилка логування входу: {e}")
 
-    return {
-        "status": "success",
-        "user_id": user_id,
-        "full_name": full_name,
-        "role": role
-    }
+    return {"status": "success", "user_id": user_id, "full_name": full_name, "role": role}

@@ -20,8 +20,7 @@ if "role" not in st.session_state:
             try:
                 # Відправляємо запит на FastAPI
                 response = requests.post(
-                    "http://127.0.0.1:8000/api/auth/login",
-                    json={"login": login, "password": password}
+                    "http://127.0.0.1:8000/api/auth/login", json={"login": login, "password": password}
                 )
 
                 if response.status_code == 200:
